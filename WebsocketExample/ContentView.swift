@@ -6,13 +6,26 @@
 //
 
 import SwiftUI
+import Network
 
 struct ContentView: View {
     @State private var webSocketTask: URLSessionWebSocketTask?
     @State private var messages: [String] = []
     @State private var messageText: String = ""
     @State private var isConnected: Bool = false
-    
+
+    private static var urlSession: URLSession = {
+        let config = URLSessionConfiguration.default
+        if #available(iOS 17.0, *) {
+            let socksv5Proxy = NWEndpoint.hostPort(host: "192.168.1.9", port: 8889) // Replace with your Proxyman SOCKS Proxy Server IP address
+            let proxyConfig = ProxyConfiguration.init(socksv5Proxy: socksv5Proxy)
+
+            config.proxyConfigurations = [proxyConfig]
+        }
+
+        return URLSession(configuration: config, delegate: nil, delegateQueue: nil)
+    }()
+
     var body: some View {
         VStack {
             // Connection status and button
@@ -23,7 +36,31 @@ struct ContentView: View {
                 Button(isConnected ? "Disconnect" : "Connect") {
                     isConnected ? disconnect() : connect()
                 }
+                .buttonStyle(.borderedProminent)
             }
+            
+            // Quick send buttons
+            HStack {
+                Button("Send Hi") {
+                    messageText = "Hi"
+                    sendMessage()
+                }
+                .disabled(!isConnected)
+                .buttonStyle(.bordered)
+
+                Button("Send JSON") {
+                    messageText = """
+                    {
+                        "message": "Hello",
+                        "timestamp": "\(Date())"
+                    }
+                    """
+                    sendMessage()
+                }
+                .disabled(!isConnected)
+                .buttonStyle(.bordered)
+            }
+            .padding(.vertical, 4)
             
             // Messages display
             ScrollView {
@@ -53,8 +90,7 @@ struct ContentView: View {
     
     private func connect() {
         let url = URL(string: "wss://echo.websocket.org")! // Example echo server
-        let session = URLSession(configuration: .default)
-        webSocketTask = session.webSocketTask(with: url)
+        webSocketTask = ContentView.urlSession.webSocketTask(with: url)
         webSocketTask?.resume()
         isConnected = true
         receiveMessage()
